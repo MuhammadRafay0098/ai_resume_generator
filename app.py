@@ -139,97 +139,114 @@ class ResumePDF(FPDF):
         super().__init__()
         self.set_auto_page_break(auto=True, margin=15)
         self.set_margins(15, 15, 15)
-    
+
     def clean_text(self, text):
         if not text:
             return ""
-        return str(text).encode('latin-1', 'replace').decode('latin-1').strip()
-    
+        # Handle unicode dashes, bullets, and accents safely
+        text = str(text).replace("•", "-").replace("—", "-").replace("–", "-")
+        return text.encode('latin-1', 'replace').decode('latin-1').strip()
+
+    def add_section_header(self, title):
+        eff_width = self.w - self.l_margin - self.r_margin
+        self.ln(3)
+        self.set_font('Helvetica', 'B', 11)
+        self.set_text_color(26, 82, 118) # Deep navy blue color
+        self.cell(eff_width, 6, title.upper(), 0, 1, 'L')
+        self.set_draw_color(214, 219, 223) # Soft grey underline
+        self.set_linewidth(0.4)
+        self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
+        self.ln(3)
+
     def create_resume(self, content, user_data):
         self.add_page()
+        eff_width = self.w - self.l_margin - self.r_margin
+
+        # ================= HEADER =================
+        self.set_font('Helvetica', 'B', 20)
+        self.set_text_color(33, 47, 60)
+        name = self.clean_text(user_data.get('name', ''))
+        self.cell(eff_width, 10, name, 0, 1, 'C')
+
+        # Contact Info Bar
+        self.set_font('Helvetica', '', 9)
+        self.set_text_color(100, 110, 120)
+        contact_items = []
+        if user_data.get('email'): contact_items.append(self.clean_text(user_data['email']))
+        if user_data.get('phone'): contact_items.append(self.clean_text(user_data['phone']))
+        if user_data.get('linkedin'): contact_items.append(self.clean_text(user_data['linkedin']))
         
-        # Calculate available printable width
-        effective_page_width = self.w - self.l_margin - self.r_margin
-        
-        # Name
-        self.set_font('Helvetica', 'B', 22)
-        self.set_text_color(30, 60, 90)
-        self.cell(effective_page_width, 12, self.clean_text(user_data.get('name', '')), 0, 1, 'C')
-        
-        # Contact
-        self.set_font('Helvetica', '', 10)
-        self.set_text_color(80, 80, 80)
-        contact = []
-        if user_data.get('email'): contact.append(f"Email: {user_data['email']}")
-        if user_data.get('phone'): contact.append(f"Phone: {user_data['phone']}")
-        if user_data.get('linkedin'): contact.append(f"LinkedIn: {user_data['linkedin']}")
-        if contact:
-            self.cell(effective_page_width, 6, self.clean_text(' | '.join(contact)), 0, 1, 'C')
-        self.ln(6)
-        
-        # Professional Summary
-        self.set_font('Helvetica', 'B', 12)
-        self.set_text_color(30, 60, 90)
-        self.cell(effective_page_width, 8, "PROFESSIONAL SUMMARY", 0, 1)
-        self.set_draw_color(52, 152, 219)
-        self.line(15, self.get_y(), 195, self.get_y())
-        self.ln(3)
-        self.set_font('Helvetica', '', 10)
-        self.set_text_color(0, 0, 0)
-        self.multi_cell(effective_page_width, 5, self.clean_text(content.get('summary', '')))
-        self.ln(4)
-        
-        # Work Experience
+        if contact_items:
+            self.cell(eff_width, 5, '  |  '.join(contact_items), 0, 1, 'C')
+        self.ln(2)
+
+        # ================= SUMMARY =================
+        summary_text = self.clean_text(content.get('summary', ''))
+        if summary_text:
+            self.add_section_header("Professional Summary")
+            self.set_font('Helvetica', '', 9.5)
+            self.set_text_color(44, 62, 80)
+            self.multi_cell(eff_width, 4.5, summary_text)
+
+        # ================= WORK EXPERIENCE =================
         if content.get('experience'):
-            self.set_font('Helvetica', 'B', 12)
-            self.set_text_color(30, 60, 90)
-            self.cell(effective_page_width, 8, "WORK EXPERIENCE", 0, 1)
-            self.line(15, self.get_y(), 195, self.get_y())
-            self.ln(3)
+            self.add_section_header("Work Experience")
             for exp in content['experience']:
-                self.set_font('Helvetica', 'B', 11)
-                self.set_text_color(0, 0, 0)
                 title = self.clean_text(exp.get('title', ''))
                 company = self.clean_text(exp.get('company', ''))
-                self.cell(effective_page_width, 6, f"{title} - {company}" if company else title, 0, 1)
+                period = self.clean_text(exp.get('period', ''))
+
+                # Job Title & Date in split row
+                self.set_font('Helvetica', 'B', 10)
+                self.set_text_color(33, 47, 60)
                 
-                if exp.get('period'):
+                header_title = f"{title} — {company}" if company else title
+                # Compute width for title vs date
+                date_width = 45 if period else 0
+                title_width = eff_width - date_width
+
+                self.cell(title_width, 5, header_title, 0, 0, 'L')
+                if period:
                     self.set_font('Helvetica', 'I', 9)
-                    self.set_text_color(100, 100, 100)
-                    self.cell(effective_page_width, 5, self.clean_text(exp['period']), 0, 1)
-                
-                self.set_font('Helvetica', '', 10)
-                self.set_text_color(0, 0, 0)
+                    self.set_text_color(127, 140, 141)
+                    self.cell(date_width, 5, period, 0, 1, 'R')
+                else:
+                    self.ln(5)
+
+                # Bullet Responsibilities
+                self.set_font('Helvetica', '', 9.5)
+                self.set_text_color(44, 62, 80)
                 for resp in exp.get('responsibilities', []):
                     clean_resp = self.clean_text(resp)
-                    self.multi_cell(effective_page_width, 5, f"- {clean_resp}")
+                    if clean_resp:
+                        # Set bullet bullet point indentation
+                        self.set_x(self.l_margin)
+                        self.cell(5, 4.5, "-", 0, 0, 'C')
+                        self.multi_cell(eff_width - 5, 4.5, clean_resp)
                 self.ln(2)
-        
-        # Education
+
+        # ================= EDUCATION =================
         if content.get('education'):
-            self.set_font('Helvetica', 'B', 12)
-            self.set_text_color(30, 60, 90)
-            self.cell(effective_page_width, 8, "EDUCATION", 0, 1)
-            self.line(15, self.get_y(), 195, self.get_y())
-            self.ln(3)
-            self.set_font('Helvetica', '', 10)
-            self.set_text_color(0, 0, 0)
+            self.add_section_header("Education")
+            self.set_font('Helvetica', '', 9.5)
+            self.set_text_color(44, 62, 80)
             for edu in content['education']:
-                self.multi_cell(effective_page_width, 5, f"- {self.clean_text(edu)}")
+                clean_edu = self.clean_text(edu)
+                if clean_edu:
+                    self.set_x(self.l_margin)
+                    self.cell(5, 4.5, "-", 0, 0, 'C')
+                    self.multi_cell(eff_width - 5, 4.5, clean_edu)
             self.ln(2)
-            
-        # Skills
+
+        # ================= SKILLS =================
         if content.get('skills'):
-            self.set_font('Helvetica', 'B', 12)
-            self.set_text_color(30, 60, 90)
-            self.cell(effective_page_width, 8, "SKILLS", 0, 1)
-            self.line(15, self.get_y(), 195, self.get_y())
-            self.ln(3)
-            self.set_font('Helvetica', '', 10)
-            self.set_text_color(0, 0, 0)
-            skills_text = ', '.join([self.clean_text(s) for s in content['skills']])
-            self.multi_cell(effective_page_width, 5, skills_text)
-            
+            self.add_section_header("Skills")
+            self.set_font('Helvetica', '', 9.5)
+            self.set_text_color(44, 62, 80)
+            skills_list = [self.clean_text(s) for s in content['skills'] if s]
+            skills_text = ', '.join(skills_list)
+            self.multi_cell(eff_width, 4.5, skills_text)
+
 def main():
     st.title("📄 AI Resume Generator")
     
