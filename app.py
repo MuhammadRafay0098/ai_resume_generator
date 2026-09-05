@@ -131,10 +131,13 @@ class ResumePDF(FPDF):
     def create_resume(self, content, user_data):
         self.add_page()
         
+        # Calculate available printable width
+        effective_page_width = self.w - self.l_margin - self.r_margin
+        
         # Name
         self.set_font('Helvetica', 'B', 22)
         self.set_text_color(30, 60, 90)
-        self.cell(0, 12, self.clean_text(user_data.get('name', '')), 0, 1, 'C')
+        self.cell(effective_page_width, 12, self.clean_text(user_data.get('name', '')), 0, 1, 'C')
         
         # Contact
         self.set_font('Helvetica', '', 10)
@@ -144,26 +147,26 @@ class ResumePDF(FPDF):
         if user_data.get('phone'): contact.append(f"Phone: {user_data['phone']}")
         if user_data.get('linkedin'): contact.append(f"LinkedIn: {user_data['linkedin']}")
         if contact:
-            self.cell(0, 6, self.clean_text(' | '.join(contact)), 0, 1, 'C')
+            self.cell(effective_page_width, 6, self.clean_text(' | '.join(contact)), 0, 1, 'C')
         self.ln(6)
         
-        # Summary
+        # Professional Summary
         self.set_font('Helvetica', 'B', 12)
         self.set_text_color(30, 60, 90)
-        self.cell(0, 8, "PROFESSIONAL SUMMARY", 0, 1)
+        self.cell(effective_page_width, 8, "PROFESSIONAL SUMMARY", 0, 1)
         self.set_draw_color(52, 152, 219)
         self.line(15, self.get_y(), 195, self.get_y())
         self.ln(3)
         self.set_font('Helvetica', '', 10)
         self.set_text_color(0, 0, 0)
-        self.multi_cell(0, 5, self.clean_text(content.get('summary', '')))
+        self.multi_cell(effective_page_width, 5, self.clean_text(content.get('summary', '')))
         self.ln(4)
         
-        # Experience
+        # Work Experience
         if content.get('experience'):
             self.set_font('Helvetica', 'B', 12)
             self.set_text_color(30, 60, 90)
-            self.cell(0, 8, "WORK EXPERIENCE", 0, 1)
+            self.cell(effective_page_width, 8, "WORK EXPERIENCE", 0, 1)
             self.line(15, self.get_y(), 195, self.get_y())
             self.ln(3)
             for exp in content['experience']:
@@ -171,44 +174,45 @@ class ResumePDF(FPDF):
                 self.set_text_color(0, 0, 0)
                 title = self.clean_text(exp.get('title', ''))
                 company = self.clean_text(exp.get('company', ''))
-                self.cell(0, 6, f"{title} - {company}" if company else title, 0, 1)
+                self.cell(effective_page_width, 6, f"{title} - {company}" if company else title, 0, 1)
                 
                 if exp.get('period'):
                     self.set_font('Helvetica', 'I', 9)
                     self.set_text_color(100, 100, 100)
-                    self.cell(0, 5, self.clean_text(exp['period']), 0, 1)
+                    self.cell(effective_page_width, 5, self.clean_text(exp['period']), 0, 1)
                 
                 self.set_font('Helvetica', '', 10)
                 self.set_text_color(0, 0, 0)
                 for resp in exp.get('responsibilities', []):
-                    self.multi_cell(0, 5, f"- {self.clean_text(resp)}")
+                    clean_resp = self.clean_text(resp)
+                    self.multi_cell(effective_page_width, 5, f"- {clean_resp}")
                 self.ln(2)
         
         # Education
         if content.get('education'):
             self.set_font('Helvetica', 'B', 12)
             self.set_text_color(30, 60, 90)
-            self.cell(0, 8, "EDUCATION", 0, 1)
+            self.cell(effective_page_width, 8, "EDUCATION", 0, 1)
             self.line(15, self.get_y(), 195, self.get_y())
             self.ln(3)
             self.set_font('Helvetica', '', 10)
             self.set_text_color(0, 0, 0)
             for edu in content['education']:
-                self.multi_cell(0, 5, f"- {self.clean_text(edu)}")
+                self.multi_cell(effective_page_width, 5, f"- {self.clean_text(edu)}")
             self.ln(2)
             
         # Skills
         if content.get('skills'):
             self.set_font('Helvetica', 'B', 12)
             self.set_text_color(30, 60, 90)
-            self.cell(0, 8, "SKILLS", 0, 1)
+            self.cell(effective_page_width, 8, "SKILLS", 0, 1)
             self.line(15, self.get_y(), 195, self.get_y())
             self.ln(3)
             self.set_font('Helvetica', '', 10)
             self.set_text_color(0, 0, 0)
             skills_text = ', '.join([self.clean_text(s) for s in content['skills']])
-            self.multi_cell(0, 5, skills_text)
-
+            self.multi_cell(effective_page_width, 5, skills_text)
+            
 def main():
     st.title("📄 AI Resume Generator")
     
