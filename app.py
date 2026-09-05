@@ -31,109 +31,6 @@ def init_groq_client():
         st.error(f"❌ Failed to initialize Groq: {str(e)}")
         st.stop()
 
-class ResumeGenerator:
-    def __init__(self):
-        self.client = init_groq_client()
-        self.model = "openai/gpt-oss-20b"
-    
-    def clean_json_response(self, content):
-        if not content:
-            return None
-        content = re.sub(r'```json\s*', '', content)
-        content = re.sub(r'```\s*', '', content)
-        json_match = re.search(r'\{[\s\S]*\}', content)
-        if json_match:
-            return json_match.group(0)
-        return content.strip()
-    
-    def generate_resume_content(self, data):
-        prompt = f"""
-Create an ATS-optimized resume in JSON format based on the following candidate information:
-- Name: {data.get('name', '')}
-- Email: {data.get('email', '')}
-- Phone: {data.get('phone', '')}
-- LinkedIn: {data.get('linkedin', '')}
-- Experience: {data.get('experience', '')}
-- Education: {data.get('education', '')}
-- Skills: {data.get('skills', '')}
-- Projects: {data.get('projects', '')}
-
-Return a valid JSON object matching this exact schema:
-{{
-    "summary": "Detailed 3-4 sentence professional summary focusing on candidate strengths.",
-    "experience": [
-        {{
-            "title": "Job Title",
-            "company": "Company Name",
-            "period": "Start Date - End Date",
-            "responsibilities": [
-                "Key achievement or action bullet point 1",
-                "Key achievement or action bullet point 2"
-            ]
-        }}
-    ],
-    "education": [
-        "Degree | University Name | Year"
-    ],
-    "skills": [
-        "Skill 1", "Skill 2", "Skill 3"
-    ],
-    "projects": [
-        {{
-            "name": "Project Name",
-            "description": "Brief project description",
-            "technologies": ["Tech 1", "Tech 2"]
-        }}
-    ]
-}}
-"""
-        
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a professional resume writer. Respond ONLY with a valid JSON object containing complete resume details."
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3,
-                max_tokens=2000,
-                response_format={"type": "json_object"}
-            )
-            
-            raw_content = response.choices[0].message.content
-            cleaned = self.clean_json_response(raw_content)
-            
-            if cleaned:
-                parsed_data = json.loads(cleaned)
-                return parsed_data
-            
-            return self.get_default_resume(data)
-                
-        except Exception as e:
-            st.error(f"AI Generation Error: {str(e)}")
-            return self.get_default_resume(data)
-    
-    def get_default_resume(self, data):
-        return {
-            "summary": f"Results-driven professional with hands-on experience in {data.get('skills', 'core technologies')}. Dedicated to delivering high-quality outcomes and collaborating effectively with cross-functional teams.",
-            "experience": [
-                {
-                    "title": "Software Developer / Technical Specialist",
-                    "company": "Professional Experience",
-                    "period": "2022 - Present",
-                    "responsibilities": [
-                        data.get('experience', 'Developed and maintained key platform components.').split('\n')[0]
-                    ]
-                }
-            ],
-            "education": [data.get('education', 'Bachelor of Science')],
-            "skills": [s.strip() for s in data.get('skills', '').split(',') if s.strip()] or ["Python", "Streamlit"],
-            "projects": []
-        }
-        
 class ResumePDF(FPDF):
     def __init__(self):
         super().__init__()
@@ -143,7 +40,6 @@ class ResumePDF(FPDF):
     def clean_text(self, text):
         if not text:
             return ""
-        # Handle unicode dashes, bullets, and accents safely
         text = str(text).replace("•", "-").replace("—", "-").replace("–", "-")
         return text.encode('latin-1', 'replace').decode('latin-1').strip()
 
@@ -151,10 +47,10 @@ class ResumePDF(FPDF):
         eff_width = self.w - self.l_margin - self.r_margin
         self.ln(3)
         self.set_font('Helvetica', 'B', 11)
-        self.set_text_color(26, 82, 118) # Deep navy blue color
+        self.set_text_color(26, 82, 118)
         self.cell(eff_width, 6, title.upper(), 0, 1, 'L')
-        self.set_draw_color(214, 219, 223) # Soft grey underline
-        self.set_linewidth(0.4)
+        self.set_draw_color(214, 219, 223)
+        self.set_line_width(0.4)  # Corrected method name
         self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
         self.ln(3)
 
@@ -162,13 +58,13 @@ class ResumePDF(FPDF):
         self.add_page()
         eff_width = self.w - self.l_margin - self.r_margin
 
-        # ================= HEADER =================
+        # Header
         self.set_font('Helvetica', 'B', 20)
         self.set_text_color(33, 47, 60)
         name = self.clean_text(user_data.get('name', ''))
         self.cell(eff_width, 10, name, 0, 1, 'C')
 
-        # Contact Info Bar
+        # Contact Bar
         self.set_font('Helvetica', '', 9)
         self.set_text_color(100, 110, 120)
         contact_items = []
@@ -180,7 +76,7 @@ class ResumePDF(FPDF):
             self.cell(eff_width, 5, '  |  '.join(contact_items), 0, 1, 'C')
         self.ln(2)
 
-        # ================= SUMMARY =================
+        # Summary
         summary_text = self.clean_text(content.get('summary', ''))
         if summary_text:
             self.add_section_header("Professional Summary")
@@ -188,7 +84,7 @@ class ResumePDF(FPDF):
             self.set_text_color(44, 62, 80)
             self.multi_cell(eff_width, 4.5, summary_text)
 
-        # ================= WORK EXPERIENCE =================
+        # Work Experience
         if content.get('experience'):
             self.add_section_header("Work Experience")
             for exp in content['experience']:
@@ -196,12 +92,10 @@ class ResumePDF(FPDF):
                 company = self.clean_text(exp.get('company', ''))
                 period = self.clean_text(exp.get('period', ''))
 
-                # Job Title & Date in split row
                 self.set_font('Helvetica', 'B', 10)
                 self.set_text_color(33, 47, 60)
                 
-                header_title = f"{title} — {company}" if company else title
-                # Compute width for title vs date
+                header_title = f"{title} - {company}" if company else title
                 date_width = 45 if period else 0
                 title_width = eff_width - date_width
 
@@ -213,19 +107,17 @@ class ResumePDF(FPDF):
                 else:
                     self.ln(5)
 
-                # Bullet Responsibilities
                 self.set_font('Helvetica', '', 9.5)
                 self.set_text_color(44, 62, 80)
                 for resp in exp.get('responsibilities', []):
                     clean_resp = self.clean_text(resp)
                     if clean_resp:
-                        # Set bullet bullet point indentation
                         self.set_x(self.l_margin)
                         self.cell(5, 4.5, "-", 0, 0, 'C')
                         self.multi_cell(eff_width - 5, 4.5, clean_resp)
                 self.ln(2)
 
-        # ================= EDUCATION =================
+        # Education
         if content.get('education'):
             self.add_section_header("Education")
             self.set_font('Helvetica', '', 9.5)
@@ -238,7 +130,7 @@ class ResumePDF(FPDF):
                     self.multi_cell(eff_width - 5, 4.5, clean_edu)
             self.ln(2)
 
-        # ================= SKILLS =================
+        # Skills
         if content.get('skills'):
             self.add_section_header("Skills")
             self.set_font('Helvetica', '', 9.5)
@@ -246,6 +138,76 @@ class ResumePDF(FPDF):
             skills_list = [self.clean_text(s) for s in content['skills'] if s]
             skills_text = ', '.join(skills_list)
             self.multi_cell(eff_width, 4.5, skills_text)
+
+
+class ResumeGenerator:
+    def __init__(self):
+        self.client = init_groq_client()
+        self.model = "openai/gpt-oss-20b"
+
+    def generate_resume_content(self, data):
+        prompt = f"""
+You must output a strictly valid JSON object. Do not include extra commentary or quotes around the response.
+
+Candidate details:
+- Name: {data.get('name', '')}
+- Email: {data.get('email', '')}
+- Phone: {data.get('phone', '')}
+- LinkedIn: {data.get('linkedin', '')}
+- Experience: {data.get('experience', '')}
+- Education: {data.get('education', '')}
+- Skills: {data.get('skills', '')}
+- Projects: {data.get('projects', '')}
+
+Output JSON structure:
+{{
+    "summary": "Professional summary paragraph.",
+    "experience": [
+        {{
+            "title": "Job Title",
+            "company": "Company Name",
+            "period": "Start - End Date",
+            "responsibilities": ["Responsibility bullet 1", "Responsibility bullet 2"]
+        }}
+    ],
+    "education": ["Degree details"],
+    "skills": ["Skill 1", "Skill 2"]
+}}
+"""
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a specialized JSON resume builder. You always respond with a single valid JSON object containing summary, experience, education, and skills."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.1,
+                max_tokens=2000,
+                response_format={"type": "json_object"}
+            )
+            raw_content = response.choices[0].message.content
+            return json.loads(raw_content)
+        except Exception as e:
+            st.error(f"AI Generation Error: {str(e)}")
+            return self.get_default_resume(data)
+
+    def get_default_resume(self, data):
+        return {
+            "summary": f"Results-driven professional with experience in {data.get('skills', 'core domain skills')}.",
+            "experience": [
+                {
+                    "title": "Professional Role",
+                    "company": "Organization",
+                    "period": "Recent",
+                    "responsibilities": [data.get('experience', 'Managed core operations.')]
+                }
+            ],
+            "education": [data.get('education', 'Academic Qualification')],
+            "skills": [s.strip() for s in data.get('skills', '').split(',') if s.strip()] or ["General Skills"]
+        }
 
 def main():
     st.title("📄 AI Resume Generator")
