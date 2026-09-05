@@ -37,86 +37,103 @@ class ResumeGenerator:
         self.model = "openai/gpt-oss-20b"
     
     def clean_json_response(self, content):
+        if not content:
+            return None
         content = re.sub(r'```json\s*', '', content)
         content = re.sub(r'```\s*', '', content)
-        json_match = re.search(r'\{[\s\S]*?\}', content)
-        if not json_match:
-            return None
-        json_str = json_match.group()
-        json_str = re.sub(r',\s*}', '}', json_str)
-        json_str = re.sub(r',\s*]', ']', json_str)
-        return json_str
+        json_match = re.search(r'\{[\s\S]*\}', content)
+        if json_match:
+            return json_match.group(0)
+        return content.strip()
     
-    def safe_parse_json(self, json_str):
-        try:
-            return json.loads(json_str)
-        except Exception:
-            return self.get_default_resume({})
-
     def generate_resume_content(self, data):
         prompt = f"""
-        Create an ATS-optimized resume in JSON format based on:
-        Name: {data.get('name', '')}
-        Email: {data.get('email', '')}
-        Phone: {data.get('phone', '')}
-        LinkedIn: {data.get('linkedin', '')}
-        Experience: {data.get('experience', '')}
-        Education: {data.get('education', '')}
-        Skills: {data.get('skills', '')}
-        Projects: {data.get('projects', '')}
-        
-        Return ONLY a valid JSON object with this exact structure:
+Create an ATS-optimized resume in JSON format based on the following candidate information:
+- Name: {data.get('name', '')}
+- Email: {data.get('email', '')}
+- Phone: {data.get('phone', '')}
+- LinkedIn: {data.get('linkedin', '')}
+- Experience: {data.get('experience', '')}
+- Education: {data.get('education', '')}
+- Skills: {data.get('skills', '')}
+- Projects: {data.get('projects', '')}
+
+Return a valid JSON object matching this exact schema:
+{{
+    "summary": "Detailed 3-4 sentence professional summary focusing on candidate strengths.",
+    "experience": [
         {{
-            "summary": "professional summary text",
-            "experience": [
-                {{"title": "Job Title", "company": "Company Name", "period": "Date Range", "responsibilities": ["achievement 1", "achievement 2"]}}
-            ],
-            "education": ["Degree | University | Year"],
-            "skills": ["Skill 1", "Skill 2"],
-            "projects": [
-                {{"name": "Project Name", "description": "Brief description", "technologies": ["Tech1"], "achievements": ["Achievement 1"]}}
+            "title": "Job Title",
+            "company": "Company Name",
+            "period": "Start Date - End Date",
+            "responsibilities": [
+                "Key achievement or action bullet point 1",
+                "Key achievement or action bullet point 2"
             ]
         }}
-        """
+    ],
+    "education": [
+        "Degree | University Name | Year"
+    ],
+    "skills": [
+        "Skill 1", "Skill 2", "Skill 3"
+    ],
+    "projects": [
+        {{
+            "name": "Project Name",
+            "description": "Brief project description",
+            "technologies": ["Tech 1", "Tech 2"]
+        }}
+    ]
+}}
+"""
+        
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an expert resume writer. Return ONLY valid raw JSON."},
+                    {
+                        "role": "system",
+                        "content": "You are a professional resume writer. Respond ONLY with a valid JSON object containing complete resume details."
+                    },
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
-                max_tokens=2000
+                max_tokens=2000,
+                response_format={"type": "json_object"}
             )
             
-            content = response.choices[0].message.content
-            clean_json = self.clean_json_response(content)
-            if clean_json:
-                parsed = self.safe_parse_json(clean_json)
-                if parsed:
-                    return parsed
+            raw_content = response.choices[0].message.content
+            cleaned = self.clean_json_response(raw_content)
+            
+            if cleaned:
+                parsed_data = json.loads(cleaned)
+                return parsed_data
+            
             return self.get_default_resume(data)
                 
         except Exception as e:
-            st.error(f"AI Generation Warning: {str(e)}")
+            st.error(f"AI Generation Error: {str(e)}")
             return self.get_default_resume(data)
     
     def get_default_resume(self, data):
         return {
-            "summary": f"Experienced professional skilled in {data.get('skills', 'relevant domain topics')}.",
+            "summary": f"Results-driven professional with hands-on experience in {data.get('skills', 'core technologies')}. Dedicated to delivering high-quality outcomes and collaborating effectively with cross-functional teams.",
             "experience": [
                 {
-                    "title": "Professional Experience",
-                    "company": "Various Organizations",
-                    "period": "Recent",
-                    "responsibilities": ["Delivered results according to expectations.", "Collaborated effectively with team members."]
+                    "title": "Software Developer / Technical Specialist",
+                    "company": "Professional Experience",
+                    "period": "2022 - Present",
+                    "responsibilities": [
+                        data.get('experience', 'Developed and maintained key platform components.').split('\n')[0]
+                    ]
                 }
             ],
-            "education": [data.get('education', 'Education Information Provided')],
-            "skills": [s.strip() for s in data.get('skills', '').split(',') if s.strip()] or ["Core Skills"],
+            "education": [data.get('education', 'Bachelor of Science')],
+            "skills": [s.strip() for s in data.get('skills', '').split(',') if s.strip()] or ["Python", "Streamlit"],
             "projects": []
         }
-
+        
 class ResumePDF(FPDF):
     def __init__(self):
         super().__init__()
