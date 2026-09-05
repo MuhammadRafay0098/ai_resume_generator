@@ -1,0 +1,7 @@
+streamlit
+groq
+fpdf2
+pillow
+python-dotenv
+requests
+validators
